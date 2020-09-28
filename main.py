@@ -4,10 +4,9 @@ import gui
 from pdf_sheet_handling import get_pdf_fitted_pages
 import sheet_recognition as sr
 import sheet_logic as sl
-import numpy as np
 
 
-PDF_PATH = pathlib.Path("C:\\Users\\mayas\\Downloads\\Wheres-The-Bathroom-Revised-Final-10.31.16.pdf")
+PDF_PATH = pathlib.Path("C:\\Users\\mayas\\Downloads\\Remember-That-We-Suffered-v2-Rev-07_20_19.pdf")
 root = tk.Tk()
 height = root.winfo_screenheight() - 100
 

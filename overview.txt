@@ -1,5 +1,3 @@
 TODO:
-- Pad bottom by text
-- Keep scale
-- Use modifier
+- Consider accidentals
 - Add extra lines for top/bottom notes

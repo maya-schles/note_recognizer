@@ -1,5 +1,5 @@
 import itertools
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 import numpy as np
 import cv2
@@ -49,7 +49,7 @@ def dedup_search(template_shape: Tuple[int, int], matches: List[Tuple[int, int]]
             cluster = match
             matches_clusters[cluster] = []
         matches_clusters[cluster].append(match)
-    return [tuple(np.mean(cluster_elements, axis=0)) for cluster_elements in matches_clusters.values()]
+    return [tuple(np.round(np.mean(cluster_elements, axis=0)).astype(int)) for cluster_elements in matches_clusters.values()]
 
 
 def search(image: np.ndarray, template: np.ndarray, threshold: float = None) -> List[Tuple[int, int]]:
@@ -76,26 +76,46 @@ def get_all_notes(image: np.ndarray, note_templates: List[np.ndarray] = template
         for template in note_templates)))
 
 
-DEFAULT_TOP_PAD = 2
-DEFAULT_BOTTOM_PAD = 4
+DEFAULT_TOP_PAD = 10
+DEFAULT_BOTTOM_PAD = 10
+DEFAULT_LEFT_PAD = 30
 COLOR_WHITE = 255
 COLOR_BLACK = 0
 
 
+def classify_notes_by_staffs(note_locations: List[Tuple[int, int]], staffs: np.ndarray) -> List[int]:
+    res = [None] * len(note_locations)
+    for i, note_location in enumerate(note_locations):
+        res[i] = np.argmin(np.abs(staffs - note_location[0]))
+    return res
+
+
+def cluster_notes_by_staffs(note_locations: List[Tuple[int, int]], staffs: np.ndarray) -> Dict[int, List[Tuple[int, int]]]:
+    note_classification = classify_notes_by_staffs(note_locations, staffs)
+    res = {k: [] for k in range(len(staffs))}
+    for i, classification in enumerate(note_classification):
+        res[classification].append(note_locations[i])
+    return res
+
+
 def clear_notes(
         image: np.ndarray,
+        pad_left: int = DEFAULT_LEFT_PAD,
         pad_top: int = DEFAULT_TOP_PAD,
         pad_bottom: int = DEFAULT_BOTTOM_PAD,
         fill_color: int = COLOR_WHITE,
         line_color: int = COLOR_BLACK) -> np.ndarray:
     new_image = image.copy()
-
     staffs, line_width = get_staffs(image)
-    for staff in staffs:
-        line_start = get_line_start(image[staff])
-        top_start = staff-line_width*(2+pad_top)
-        bottom_end = staff+line_width*(2+pad_bottom)
-        new_image[top_start:bottom_end, line_start:] = fill_color
+    clustered_notes = cluster_notes_by_staffs(get_all_notes(image), staffs)
+    for i, staff in enumerate(staffs):
+        notes_x = [note_location[0] for note_location in clustered_notes[i]]
+
+        line_start = min([note_location[1] for note_location in clustered_notes[i]]) - pad_left
+        x_start = staff - 4*line_width
+        default_x_end = staff + 3*line_width # TODO: find better name
+        x_end = max(max(notes_x) + pad_bottom, default_x_end)
+        new_image[x_start:x_end, line_start:] = fill_color
 
     line_heights = get_line_heights(image)
     for line_height in line_heights:
