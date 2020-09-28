@@ -10,17 +10,69 @@ def get_tk_image(cv_image: np.ndarray):
     return ImageTk.PhotoImage(image=Image.fromarray(cv_image))
 
 
-NOTE_WIDTH = 7
+class OptionalNote:
+    NOTE_WIDTH = 7
+    NOTE_COLOR = 'red'
+    SELECTED_LOCKED_COLOR = 'green'
+
+    def __init__(self, canvas: tk.Canvas, center_location: Tuple[int, int]):
+        self.canvas = canvas
+        self.center_location = center_location
+        self.id = self.canvas.create_oval(
+            *center_location, *center_location, activewidth=self.NOTE_WIDTH, outline=self.NOTE_COLOR)
+
+    def is_selected(self) -> bool:
+        return "current" in self.canvas.gettags(self.id)
+
+    def lock(self) -> None:
+        if self.is_selected():
+            self.canvas.itemconfig(self.id, width=self.NOTE_WIDTH, outline=self.SELECTED_LOCKED_COLOR)
+        else:
+            self.canvas.itemconfig(self.id, activewidth=0)
+
+
+class NoteSelector:
+    def __init__(self, canvas: tk.Canvas, center_location: Tuple[int, int], lowest_note: sl.Note, highest_note: sl.Note, linewidth: int):
+        self.optional_notes = {
+            note: OptionalNote(canvas, np.add(center_location, self.get_note_relative_center(note, linewidth)))
+            for note in sl.note_range(lowest_note, highest_note)}
+        self.is_locked = False
+
+    @staticmethod
+    def get_note_relative_center(note: sl.Note, line_width: int) -> Tuple[int, int]:
+        i = note.to_index() - 6
+        height_delta = -np.round(i*line_width/2)  # Higher note - lower index...
+        return 0, height_delta
+
+    def is_selected(self) -> bool:
+        return np.any([view.is_selected() for view in self.optional_notes.values()])
+
+    def get_selection(self) -> Optional[sl.Note]:
+        for note, view in self.optional_notes.items():
+            if view.is_selected():
+                return note
+        return None
+
+    def lock_selection(self) -> None:
+        for view in self.optional_notes.values():
+            view.lock()
+        self.is_locked = True
+
+    def unlock(self) -> None:
+        self.is_locked = False
 
 
 class MainWindow:
+    DEFAULT_LOWEST_NOTE = sl.Note(4, sl.NoteClass.C)
+    DEFAULT_HIGHEST_NOTE = sl.Note(5, sl.NoteClass.A)
+
     def __init__(
             self,
             root: tk.Tk,
             image: np.ndarray,
             note_locations: List[Tuple[int, int]],
             note_classifications: List[sl.Note],
-            staffs: List[int],
+            staffs: np.ndarray,
             line_width: int):
         self.root = root
         self.canvas = tk.Canvas(self.root, width=image.shape[1], height=image.shape[0])
@@ -29,33 +81,30 @@ class MainWindow:
         self.line_width = line_width
         self.note_classifications = note_classifications
 
-        self.note_indicator_lists = []
+        lowest_note = min(min(note_classifications), self.DEFAULT_LOWEST_NOTE)
+        highest_note = max(max(note_classifications), self.DEFAULT_HIGHEST_NOTE)
+
+        self.note_selectors = []
         for note_location in note_locations:
             staff = sl.get_closest_staff(staffs, note_location[0])
-            self.note_indicator_lists.append(self._create_note_indicator(note_location[1], staff))
+            canvas_location = (note_location[1], staff)
+            note_selector = NoteSelector(self.canvas, canvas_location, lowest_note, highest_note, line_width)
+            self.note_selectors.append(note_selector)
         self.canvas.bind("<Button-1>", self.click)
         self.canvas.pack()
-
-    def _create_note_indicator(self, note_x, staff_y, above_num=5, below_num=9):
-        note_indicators = []
-        for i in range(-above_num, below_num+1):
-            note_indicator = self.canvas.create_oval(
-                note_x, staff_y+round(i*self.line_width/2), note_x+2, staff_y+round(i*self.line_width/2)+2,
-                activewidth=NOTE_WIDTH, outline='red')
-            note_indicators.append((note_indicator, sl.Note(i % len(sl.Note))))
-        return note_indicators
 
     def mainloop(self):
         return self.root.mainloop()
 
     def get_active_note(self) -> (int, sl.Note):
-        for i, note_indicators in enumerate(self.note_indicator_lists):
-            for indicator in note_indicators:
-                if "current" in self.canvas.gettags(indicator[0]):
-                    return i, indicator[1]
+        for i, note_selector in enumerate(self.note_selectors):
+            if note_selector.is_selected():
+                return i, note_selector.get_selection()
         return None, None
 
     def click(self, event):
         note_ind, note = self.get_active_note()
         if note_ind is not None:
+            if note == self.note_classifications[note_ind]:
+                self.note_selectors[note_ind].lock_selection()
             print(str(note), note == self.note_classifications[note_ind])

@@ -16,8 +16,9 @@ page = pages[0]
 
 staff_locations, line_width = sr.get_staffs(page)
 note_locations = sr.get_all_notes(page)
-note_heights = [note_location[0] for note_location in note_locations]
-note_classifications = sl.classify_notes(staff_locations, line_width, note_heights)
+note_heights = [-note_location[0] for note_location in note_locations]  # invert index for higher note to have a higher index
+staff_heights = -staff_locations
+note_classifications = sl.classify_notes(staff_heights, line_width, note_heights)
 
 main_window = gui.MainWindow(root, sr.clear_notes(page), note_locations, note_classifications, staff_locations, line_width)
 main_window.mainloop()
